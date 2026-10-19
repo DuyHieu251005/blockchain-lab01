@@ -1,0 +1,4 @@
+# Default owner; add teammates per area, e.g.:
+# /src/l1sim/consensus/  @teammate1
+# /src/l1sim/network/    @teammate2
+*                        @clgp-aint-cool

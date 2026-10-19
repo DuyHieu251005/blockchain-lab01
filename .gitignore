@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.DS_Store
+.idea/
+.vscode/
+
+# Run artefacts (keep folder, ignore generated logs)
+logs/*
+!logs/.gitkeep
+
+# Submission archive
+Lab01_*.zip

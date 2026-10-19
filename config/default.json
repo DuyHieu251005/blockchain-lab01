@@ -1,0 +1,20 @@
+{
+  "chain_id": "lab01-devnet",
+  "seed": 42,
+  "num_validators": 8,
+  "byzantine": 0,
+  "network": {
+    "min_delay_ms": 10,
+    "max_delay_ms": 200,
+    "drop_rate": 0.0,
+    "duplicate_rate": 0.0,
+    "gst_ms": 0,
+    "delta_ms": 500
+  },
+  "consensus": {
+    "timeout_propose_ms": 1000,
+    "timeout_prevote_ms": 1000,
+    "timeout_precommit_ms": 1000
+  },
+  "max_height": 10
+}
