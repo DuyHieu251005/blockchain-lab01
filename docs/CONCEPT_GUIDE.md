@@ -9,7 +9,7 @@
 3. [Tầng 2 – Cryptography](#tầng-2--cryptography)
 4. [Tầng 3 – Network (peer-to-peer)](#tầng-3--network-peer-to-peer)
 5. [Tầng 4 – Consensus BFT](#tầng-4--consensus-bft)
-6. [Tầng 5 – Determinism & hai chế độ chạy](#tầng-5--determinism--hai-chế-độ-chạy)
+6. [Tầng 5 – Determinism & reproducibility](#tầng-5--determinism--reproducibility)
 7. [Liên hệ với slides](#liên-hệ-với-slides)
 8. [Một block đi từ đầu đến cuối](#một-block-đi-từ-đầu-đến-cuối)
 9. [Glossary & checklist tự kiểm tra](#glossary--checklist-tự-kiểm-tra)
@@ -24,9 +24,9 @@ Học theo 5 tầng, từ dưới lên: mỗi tầng chỉ dựa vào tầng tr�
 flowchart BT
     T1["Tầng 1 – Nền tảng blockchain<br/>state, tx, block, ledger"]
     T2["Tầng 2 – Cryptography<br/>hash, signature, encoding"]
-    T3["Tầng 3 – Network P2P<br/>TCP, neighbor, gossip, GST"]
+    T3["Tầng 3 – Network P2P<br/>TCP, discovery, gossip, fault"]
     T4["Tầng 4 – Consensus BFT<br/>quorum, prevote, precommit, lock"]
-    T5["Tầng 5 – Determinism<br/>real mode vs sim mode, seed, log"]
+    T5["Tầng 5 – Reproducibility<br/>results byte-identical, seed"]
     T1 --> T2 --> T3 --> T4 --> T5
     style T4 stroke-width:3px
 ```
@@ -35,9 +35,9 @@ flowchart BT
 | --- | --- | --- | --- |
 | 1 | Nền tảng blockchain | Dữ liệu được tổ chức thế nào? | Phải hiểu chắc |
 | 2 | Cryptography | Làm sao biết message là thật? | Hiểu ý tưởng, không cần toán |
-| 3 | Network P2P | Message đi giữa các node (nhiều VM) thế nào, hỏng ra sao? | Hiểu neighbor, gossip, các loại lỗi |
+| 3 | Network P2P | Node tìm nhau, gửi message cho nhau thế nào, mạng hỏng ra sao? | Hiểu neighbor, discovery, gossip, các loại lỗi |
 | 4 | Consensus BFT | Làm sao nhiều node đồng ý một block? | Phần khó nhất, đọc 2–3 lần |
-| 5 | Determinism | Vì sao cần 2 chế độ chạy, làm sao chạy lại ra y hệt? | Hiểu nguyên tắc |
+| 5 | Reproducibility | Làm sao giảng viên chạy lại ra đúng kết quả của nhóm? | Hiểu nguyên tắc |
 
 Mỗi khái niệm có 3 phần: **là gì**, **vì sao cần**, **trong code Python trông thế nào**. Cuối doc có walk-through một block đi từ đầu đến cuối và một checklist tự kiểm tra: trả lời được hết checklist là đủ để dẫn team.
 
@@ -206,22 +206,21 @@ ok = verify(public_key_Alice, encode(tx), sig)   # True / False
 ```
 
 ```mermaid
-flowchart LR
-    subgraph Signer["Alice (người ký)"]
-        M1["tx (object)"] --> E1["encode()"] --> B1["bytes"] --> S["sign(secret key, bytes)"] --> SIG["chữ ký"]
+flowchart TD
+    subgraph Signer["1. Alice ký"]
+        direction LR
+        M1["tx"] --> E1["encode()<br/>ra bytes"] --> S["sign với<br/>secret key của Alice"] --> SIG["chữ ký"]
     end
-    subgraph Wire["Gửi qua mạng"]
-        W["tx + chữ ký"]
+    W["2. Gửi qua mạng: tx + chữ ký<br/>không gửi bytes"]
+    subgraph Verifier["3. Node nhận kiểm tra"]
+        direction LR
+        M2["tx nhận được"] --> E2["encode()<br/>tự dựng lại bytes"] --> V{"verify với<br/>public key của Alice"}
     end
-    subgraph Verifier["Node nhận"]
-        M2["tx (object)"] --> E2["encode()"] --> B2["bytes tự dựng lại"] --> V{"verify(public key<br/>của Alice, bytes, chữ ký)"}
-        V -- True --> OK["Chấp nhận"]
-        V -- False --> NO["Reject + log: bad_signature"]
-    end
-    M1 --> W
-    SIG --> W
-    W --> M2
-    W --> V
+    OK["Chấp nhận"]
+    NO["Reject, log: bad_signature"]
+    Signer --> W --> Verifier
+    V -- "True" --> OK
+    V -- "False" --> NO
 ```
 
 *Hai bên đều tự encode. Vì vậy encode phải ra cùng bytes ở mọi node, nếu không chữ ký thật cũng bị báo sai.*
@@ -332,75 +331,124 @@ flowchart TD
 
 ## Tầng 3 – Network (peer-to-peer)
 
-Theo yêu cầu của giảng viên, network là **peer-to-peer thật**: mỗi node là **một chương trình riêng** (một process), có thể chạy trên **nhiều VM khác nhau**, và nói chuyện với các node **hàng xóm (neighbor)** của nó qua mạng bằng TCP. Không có server trung tâm.
+Network là **peer-to-peer thật**: mỗi node là **một process riêng**, chạy trong một terminal, có port riêng, và nói chuyện với các node **neighbor** của nó bằng TCP. Không có server trung tâm.
 
-Đề bài vẫn yêu cầu kiểm tra hệ thống dưới **mạng không ổn định** (delay, drop, duplicate). Mạng LAN thật thường quá "ngoan" để tạo ra mấy lỗi đó, nên code có thêm một **lớp tạo lỗi (fault injection)** chủ động làm hỏng message theo cấu hình.
+Có 2 cách chạy, code giống hệt nhau, chỉ khác địa chỉ IP:
 
-```mermaid
-flowchart TD
-    subgraph VM1["VM 1 (192.168.1.11)"]
-        N0["Process: node V0<br/>lắng nghe port 9000"]
-        N1["Process: node V1<br/>lắng nghe port 9001"]
-    end
-    subgraph VM2["VM 2 (192.168.1.12)"]
-        N2["Process: node V2<br/>port 9000"]
-        N3["Process: node V3<br/>port 9001"]
-    end
-    subgraph VM3["VM 3 (192.168.1.13)"]
-        N4["Process: node V4<br/>port 9000"]
-    end
-    N0 <-- TCP --> N1
-    N0 <-- TCP --> N2
-    N1 <-- TCP --> N3
-    N2 <-- TCP --> N4
-    N3 <-- TCP --> N4
-    N0 <-- TCP --> N4
-```
-
-*Mỗi node là một process; một VM có thể chạy một hay nhiều node. Mỗi node chỉ nối TCP tới các neighbor của nó, không nối tới tất cả.*
-
-### Peer, neighbor và topology
-
-- **Peer / neighbor:** các node mà một node **nối trực tiếp** tới. V0 có thể có neighbor là V1, V2, V4, nhưng không nối thẳng tới V3.
-- **Topology:** bản đồ "ai nối với ai" của cả mạng. Đề cho phép topology **random** (sinh từ seed) hoặc **đọc từ file** config. Ví dụ file `config/topology.json`:
-
-```json
-{
-  "nodes": {
-    "V0": {"host": "192.168.1.11", "port": 9000},
-    "V1": {"host": "192.168.1.11", "port": 9001},
-    "V2": {"host": "192.168.1.12", "port": 9000}
-  },
-  "edges": [["V0", "V1"], ["V0", "V2"], ["V1", "V2"]]
-}
-```
-
-- **Chạy thử trên 1 máy:** mọi node dùng `host = 127.0.0.1` với port khác nhau. **Chạy trên nhiều VM:** đổi `host` thành IP của từng VM. Code giống hệt nhau, chỉ đổi file config.
-- **Lưu ý:** mỗi node nên có đủ nhiều neighbor (ví dụ ≥ f + 1). Nếu một node chỉ có 1 neighbor mà neighbor đó là Byzantine và không chuyển tiếp message, node đó bị cô lập.
-
-### TCP connection & message framing
-
-- **TCP connection:** giống một "đường ống" nối 2 chương trình qua mạng. Bên này ghi bytes vào, bên kia đọc ra đúng thứ tự, không mất (TCP tự gửi lại khi mất gói).
-- **Framing:** TCP chỉ chuyển một **dòng bytes liên tục**, không biết đâu là ranh giới giữa 2 message. Vì vậy trước mỗi message, ghi **4 bytes cho biết độ dài**, rồi mới tới nội dung (bytes từ `encode()`). Bên nhận đọc 4 bytes, biết cần đọc thêm bao nhiêu bytes nữa là đủ một message.
+- **Một máy:** 10 terminal, 10 node, cùng IP `127.0.0.1`, port 9000–9009. Thầy đã xác nhận cách này là đủ.
+- **Nhiều máy qua ZeroTier:** ví dụ laptop chạy V0–V4, homelab chạy V5–V9. Các máy dùng IP ZeroTier để gọi nhau.
 
 ```mermaid
 flowchart LR
-    M1["msg 1<br/>(120 bytes)"] --> F1["[0,0,0,120] + 120 bytes"]
-    M2["msg 2<br/>(37 bytes)"] --> F2["[0,0,0,37] + 37 bytes"]
-    F1 --> PIPE["Đường ống TCP<br/>(một dòng bytes liền nhau)"]
+    subgraph ZT["ZeroTier network 10.147.17.0/24 – như một LAN ảo"]
+        subgraph Laptop["Laptop – 10.147.17.10"]
+            V0["V0 :9000"]
+            V1["V1 :9001"]
+            V2["V2 :9002"]
+        end
+        subgraph Homelab["Homelab – 10.147.17.20"]
+            V5["V5 :9005"]
+            V6["V6 :9006"]
+            V7["V7 :9007"]
+        end
+    end
+    V0 <-- TCP --> V1
+    V1 <-- TCP --> V2
+    V0 <-- TCP --> V6
+    V2 <-- TCP --> V5
+    V5 <-- TCP --> V7
+    V1 <-- TCP --> V7
+```
+
+*Mỗi node chỉ giữ TCP connection với vài neighbor, không nối tới tất cả. Node trên laptop và homelab nói chuyện với nhau y như đang chung một LAN.*
+
+### ZeroTier là gì, với code của mình
+
+- **ZeroTier** tạo một **LAN ảo** giữa các máy ở những nơi khác nhau, ví dụ laptop ở trường và homelab ở nhà. Mỗi máy tham gia được cấp một IP trong cùng mạng ảo, ví dụ `10.147.17.10` và `10.147.17.20`, và gọi nhau như đang cắm chung một switch.
+- Vì là LAN ảo, ZeroTier hỗ trợ **broadcast và multicast**, điều mà Internet thường không có. Nhóm dùng tính năng này để **tự tìm peer**, xem mục Peer discovery.
+- **Với code:** ZeroTier chỉ là "một LAN nữa". Code không cần biết ZeroTier tồn tại; chỉ cần dùng IP ZeroTier làm địa chỉ của node.
+- **Thành viên khác** cũng có thể cài ZeroTier và join cùng network, sau khi người quản trị network duyệt. Như vậy ai cũng test được nhiều máy.
+
+### Peer, neighbor và topology
+
+- **Peer:** node khác trong mạng mà mình biết địa chỉ.
+- **Neighbor:** peer mà mình **đang giữ TCP connection trực tiếp**. V0 có thể có neighbor là V1, V6, nhưng không nối thẳng tới V5.
+- **Topology:** bản đồ "ai nối với ai" của cả mạng.
+- **Vì sao không nối tới tất cả:** đó là bản chất P2P. Mạng thật có hàng nghìn node, không ai giữ được connection tới tất cả. Message tới các node xa nhờ **gossip**, xem bên dưới.
+- **Mỗi node cần đủ neighbor:** ít nhất f + 1. Nếu một node chỉ có 1 neighbor mà neighbor đó là Byzantine và không chuyển tiếp message, node đó bị cô lập.
+
+### TCP connection & message framing
+
+- **TCP connection:** giống một "đường ống" nối 2 chương trình qua mạng. Bên này ghi bytes vào, bên kia đọc ra đúng thứ tự, không mất, vì TCP tự gửi lại khi mất gói.
+- **Framing:** TCP chỉ chuyển một **dòng bytes liên tục**, không biết đâu là ranh giới giữa 2 message. Vì vậy trước mỗi message, ghi **4 bytes cho biết độ dài**, rồi mới tới nội dung là bytes từ `encode()`. Bên nhận đọc 4 bytes, biết cần đọc thêm bao nhiêu bytes nữa là đủ một message.
+
+```mermaid
+flowchart LR
+    M1["msg 1<br/>120 bytes"] --> F1["[0,0,0,120] + 120 bytes"]
+    M2["msg 2<br/>37 bytes"] --> F2["[0,0,0,37] + 37 bytes"]
+    F1 --> PIPE["Đường ống TCP<br/>một dòng bytes liền nhau"]
     F2 --> PIPE
     PIPE --> R["Bên nhận: đọc 4 bytes độ dài<br/>→ đọc đúng chừng đó bytes<br/>→ được 1 message"]
 ```
 
-- **Python:** dùng `asyncio` (có sẵn). Một process dùng `asyncio` xử lý được nhiều kết nối TCP cùng lúc mà không cần tự quản lý thread. Việc chạy song song thật đến từ **nhiều process / nhiều VM**, mỗi node một process.
+- **Python:** dùng `asyncio`, có sẵn. Một process dùng `asyncio` xử lý được nhiều TCP connection cùng lúc mà không cần tự quản lý thread. Chạy song song thật đến từ việc có nhiều process.
 
-### Gossip: chuyển tiếp message qua hàng xóm
+### Peer discovery: node tự tìm nhau
+
+**Vấn đề:** node mới bật lên chỉ biết chính nó. Làm sao nó biết các node khác đang ở IP và port nào?
+
+**Hai câu hỏi tách riêng:**
+
+- **"Ai được tham gia?"** do `config/genesis.json` quyết định: danh sách validator id và public key, cố định suốt lần chạy. Discovery **không** thêm validator mới.
+- **"Validator đó đang ở địa chỉ nào?"** do discovery tìm ra lúc chạy.
+
+**Unicast, broadcast, multicast là gì:**
+
+| Kiểu gửi | Gửi tới | Ví dụ |
+| --- | --- | --- |
+| Unicast | Đúng một máy | TCP connection bình thường |
+| Broadcast | Mọi máy trong cùng LAN | Gửi tới `255.255.255.255` |
+| Multicast | Mọi máy đã đăng ký nghe một "kênh" | Gửi tới nhóm `239.1.1.1`, ai join nhóm này mới nhận |
+
+Broadcast và multicast **chỉ chạy trong một LAN**, không đi qua Internet. ZeroTier làm các máy thành một LAN ảo, nên chúng chạy được giữa laptop và homelab.
+
+**Nhóm tìm peer bằng multicast beacon:** mỗi node định kỳ gửi một gói UDP nhỏ `ANNOUNCE {node_id, tcp_addr}` có chữ ký tới nhóm multicast. Node nào đang nghe sẽ thêm `node_id → tcp_addr` vào **address book**. Không cần biết trước địa chỉ nào cả.
+
+**Vì sao chỉ cần multicast:** validator set cố định trong genesis, và mọi node luôn nằm trong cùng một LAN: localhost, hoặc LAN ảo ZeroTier. Các blockchain thật chạy qua Internet thì không có multicast, nên phải dùng cách khác như **bootstrap node**: một địa chỉ ghi sẵn để hỏi danh sách peer. Lab này không cần cách đó.
+
+```mermaid
+sequenceDiagram
+    participant N as Node mới V7
+    participant G as Nhóm multicast 239.1.1.1
+    participant P as Node V4
+    P->>G: ANNOUNCE V4 @ 10.147.17.20:9004, có chữ ký
+    G->>N: ANNOUNCE V4 ...
+    N->>N: verify chữ ký, thêm V4 vào address book
+    N->>G: ANNOUNCE V7 @ 10.147.17.10:9007, có chữ ký
+    G->>P: ANNOUNCE V7 ...
+    N->>N: xếp hạng peer, V4 nằm trong top → kết nối
+    N->>P: TCP connect + HELLO có chữ ký
+    P->>N: HELLO có chữ ký
+    Note over N,P: Cả hai verify bằng public key trong genesis → V4 thành neighbor của V7
+```
+
+**Quan trọng: multicast chỉ dùng để TÌM PEER, không dùng để gửi vote hay block.** Nếu gửi vote bằng multicast thì mọi node nghe được mọi thứ trực tiếp, không còn neighbor hay gossip, tức là không còn P2P nữa. Thêm nữa, UDP có thể mất gói và không có thứ tự. Mọi message của blockchain đi bằng **TCP tới neighbor + gossip**.
+
+**HELLO handshake:** ngay sau khi mở TCP connection, hai bên gửi `HELLO {node_id, listen_addr, chain_id}` có chữ ký với domain `HELLO:lab01`. Bên nhận verify bằng public key của `node_id` trong genesis. Sai chữ ký, sai `chain_id` hoặc id không có trong genesis → đóng connection, log `reason`. Nhờ vậy Byzantine node không mạo danh được validator khác, kể cả khi nó gửi ANNOUNCE giả.
+
+**Chọn neighbor:** xếp hạng mọi peer trong address book theo `sha256(seed | self_id | peer_id)`, kết nối tới `target_degree` peer đứng đầu, ví dụ 4. Nhận thêm inbound connection tới tối đa `max_degree`.
+
+- **Vì sao dùng hash thay vì chọn ngẫu nhiên hay chọn ai trả lời trước:** cùng seed → cùng topology mỗi lần chạy, kể cả khi thứ tự node bật lên khác nhau. Điều này giúp giảng viên chạy lại ra đúng kết quả, xem Tầng 5. Hash cũng phân bố đều, nên topology giống một random graph, và Byzantine node không tự chọn được vị trí đứng đầu bảng xếp hạng của node khác.
+
+**Neighbor chết:** neighbor mất kết nối quá `peer_timeout` → bỏ, log `peer_removed`, kết nối tới peer xếp hạng tiếp theo, log `peer_added`.
+
+### Gossip: chuyển tiếp message qua neighbor
 
 Vì mỗi node chỉ nối tới neighbor, một message muốn tới **mọi** node thì phải được **chuyển tiếp nhiều chặng**. Cách đơn giản nhất gọi là **gossip kiểu flooding**:
 
-1. Node tạo message (vote, header, tx) → gửi cho **mọi neighbor**.
+1. Node tạo message như vote, header, tx → gửi cho **mọi neighbor**.
 2. Node nhận một message:
-    - Đã thấy message này rồi (so theo **message id** = hash của message) → **bỏ qua, không chuyển tiếp**.
+    - Đã thấy message này rồi, so theo **message id** = hash của message → **bỏ qua, không chuyển tiếp**.
     - Chưa thấy → ghi nhớ id, xử lý, rồi **gửi tiếp cho mọi neighbor trừ người vừa gửi cho mình**.
 
 ```mermaid
@@ -413,28 +461,39 @@ flowchart LR
     V3 -- 3 --> V5((V5))
 ```
 
-*Số trên mũi tên là chặng thứ mấy. V3 nhận cùng một vote 2 lần (từ V1 và V2): lần thứ hai bị bỏ qua nhờ message id, nên không chuyển tiếp vô hạn.*
+*Số trên mũi tên là chặng thứ mấy. V3 nhận cùng một vote 2 lần, từ V1 và từ V2: lần thứ hai bị bỏ qua nhờ message id, nên message không bị chuyển tiếp vô hạn.*
 
-**Dedup (bỏ trùng) có 2 lớp, đừng nhầm:**
+**Dedup có 2 lớp, đừng nhầm:**
 
 | Lớp | Bỏ trùng theo | Mục đích |
 | --- | --- | --- |
-| Network (gossip) | message id (hash của cả message) | Không chuyển tiếp một message nhiều lần |
-| Consensus (rule 7) | (validator, height, round, phase) | Không đếm 2 vote của cùng một validator |
+| Network, trong gossip | message id = hash của cả message | Không chuyển tiếp một message nhiều lần |
+| Consensus, rule 7 | validator, height, round, phase | Không đếm 2 vote của cùng một validator |
 
 ### Fault injection: tự tạo mạng không ổn định
 
-Mỗi node có một lớp nằm ngay trước khi gửi qua TCP. Lớp này dùng `random.Random(seed)` để quyết định với từng message: gửi bình thường, **delay** bao lâu, **drop**, hay **duplicate**. Các xác suất đặt trong config.
+Mạng LAN hay ZeroTier thật thường ít khi mất hay trùng gói, nên không đủ để kiểm tra T2 và T5. Vì vậy mỗi node có một **fault injection layer** nằm ngay trước khi gửi qua TCP. Với từng message gửi tới từng neighbor, layer này quyết định: gửi bình thường, **delay** bao lâu, **drop**, hay **duplicate**.
+
+**Quyết định được tính bằng hash, không bằng random tuần tự:**
+
+```
+u = sha256(seed | src | dst | message_id) → đổi thành số trong [0, 1)
+u < drop_rate          → drop
+u < drop_rate + dup    → duplicate
+còn lại                → delay theo một phần khác của cùng hash
+```
+
+Cùng message trên cùng đường nối luôn có cùng số phận, **bất kể message nào được gửi trước**. Vì sao điều này quan trọng: xem Tầng 5.
 
 ```mermaid
 flowchart LR
-    APP["Node logic<br/>gửi message"] --> FI{"Fault injection<br/>(rng có seed)"}
-    FI -- "drop" --> X["Bỏ, log: drop"]
-    FI -- "delay d" --> D["Chờ d ms rồi gửi<br/>log: delay"]
-    FI -- "duplicate" --> DU["Gửi 2 lần<br/>log: duplicate"]
+    APP["Node gửi message<br/>tới neighbor X"] --> FI{"sha256(seed, src,<br/>X, message_id)"}
+    FI -- "drop" --> D0["Bỏ, log: drop"]
+    FI -- "delay d" --> D1["Chờ d ms rồi gửi<br/>log: delay"]
+    FI -- "duplicate" --> D2["Gửi 2 bản<br/>log: duplicate"]
     FI -- "bình thường" --> TCP["Gửi qua TCP<br/>log: send"]
-    D --> TCP
-    DU --> TCP
+    D1 --> TCP
+    D2 --> TCP
 ```
 
 ### 4 kiểu lỗi mạng
@@ -442,43 +501,43 @@ flowchart LR
 | Lỗi | Nghĩa | Code phải chịu được bằng cách |
 | --- | --- | --- |
 | Delay | Message đến trễ | Timeout + round mới |
-| Drop | Message mất hẳn | Gửi lại / chờ round sau |
-| Duplicate | Một message đến 2 lần | Dedup ở cả 2 lớp (bảng trên) |
-| Reorder | Đến sai thứ tự | Message của height/round mà node chưa tới thì giữ lại (buffer), tới lượt mới xử lý |
+| Drop | Message mất hẳn | Chờ round sau; gossip qua neighbor khác cũng có thể đưa message tới |
+| Duplicate | Một message đến 2 lần | Dedup ở cả 2 lớp, xem bảng trên |
+| Reorder | Đến sai thứ tự | Message của height hoặc round mà node chưa tới thì giữ lại, gọi là buffer, tới lượt mới xử lý |
 
-*Reorder không cần tạo riêng: delay ngẫu nhiên cho từng message đã tự làm thứ tự bị đảo.*
+*Reorder không cần tạo riêng: delay khác nhau cho từng message đã tự làm thứ tự bị đảo.*
 
 ```mermaid
 sequenceDiagram
     participant A as Node A
     participant F as Fault injection của A
     participant B as Node B
-    A->>F: send(m1), send(m2), send(m3), send(m4)
+    A->>F: send m1, m2, m3, m4
     Note over F: m1: delay 50
     Note over F: m2: DROP
     Note over F: m3: DUPLICATE
-    Note over F: m4: delay 5 (đến trước m1 → reorder)
-    F->>B: m4 (t=5)
-    F->>B: m3 (t=10)
-    F->>B: m3 lần 2 (t=12)
-    F->>B: m1 (t=50)
+    Note over F: m4: delay 5, đến trước m1 → reorder
+    F->>B: m4, t=5
+    F->>B: m3, t=10
+    F->>B: m3 lần 2, t=12
+    F->>B: m1, t=50
 ```
 
 ### Partial synchrony
 
-- **Trước GST** (Global Stabilization Time): mạng hỗn loạn tùy ý, không có giới hạn delay.
-- **Sau GST:** mọi message giữa honest node đến trong ≤ **∆** (biết trước).
-- **Hệ quả thiết kế:** code **không được** dựa vào thời gian để đảm bảo đúng (safety); thời gian (timeout) chỉ dùng để **tiến lên** (liveness).
-- **Trong code:** config có `gst_time` (tính từ lúc bắt đầu chạy). Trước mốc đó, fault injection drop/delay nhiều; sau đó delay ≤ ∆. Test T5 dùng chính cái này.
+- **Trước GST**, Global Stabilization Time: mạng hỗn loạn tùy ý, không có giới hạn delay.
+- **Sau GST:** mọi message giữa honest node đến trong ≤ **∆**, biết trước.
+- **Hệ quả thiết kế:** code **không được** dựa vào thời gian để đảm bảo đúng, tức safety; thời gian, tức timeout, chỉ dùng để **tiến lên**, tức liveness.
+- **Trong code:** GST tính theo **height** chứ không theo đồng hồ. Scenario có `gst_height`, ví dụ 3: message của height < 3 bị drop/delay nặng; từ height 3 trở đi delay ≤ ∆. Lý do không dùng đồng hồ: các máy khác nhau có đồng hồ lệch nhau, và một message gửi sát mốc GST có thể bị xếp khác nhau giữa 2 lần chạy. Test T5 dùng chính cái này.
 
 ```mermaid
 flowchart LR
-    subgraph Before["Trước GST"]
-        X1["Delay không giới hạn<br/>Drop, duplicate, reorder"]
+    subgraph Before["height < gst_height"]
+        X1["Delay rất dài, drop,<br/>duplicate, reorder"]
         X2["Safety: PHẢI giữ<br/>Liveness: được phép đứng yên"]
     end
-    G(("GST"))
-    subgraph After["Sau GST"]
+    G(("gst_height"))
+    subgraph After["height ≥ gst_height"]
         Y1["Mọi message honest<br/>đến trong ≤ ∆"]
         Y2["Safety: PHẢI giữ<br/>Liveness: PHẢI tiến lên"]
     end
@@ -487,19 +546,19 @@ flowchart LR
 
 ### Header-before-body
 
-Gửi header (nhỏ) trước. Receiver kiểm tra header hợp lệ rồi mới gửi `BODY_REQUEST`; sender mới gửi body. Header sai → không tốn băng thông cho body. Cần 3 loại message: `HEADER`, `BODY_REQUEST`, `BODY`.
+Gửi header, vốn nhỏ, trước. Receiver kiểm tra header hợp lệ rồi mới gửi `BODY_REQUEST`; sender mới gửi body. Header sai → không tốn băng thông cho body. Cần 3 loại message: `HEADER`, `BODY_REQUEST`, `BODY`.
 
 Với gossip: receiver xin body từ **neighbor đã gửi header cho mình**. Vì vậy một node **chỉ chuyển tiếp header sau khi chính nó đã có body và kiểm tra xong**, để khi neighbor xin body thì nó có sẵn mà đưa.
 
 ```mermaid
 sequenceDiagram
-    participant P as Neighbor (đã có body)
+    participant P as Neighbor đã có body
     participant R as Receiver
-    P->>R: HEADER (height, parent_hash, state_hash, chữ ký)
+    P->>R: HEADER: height, parent_hash, state_hash, chữ ký
     R->>R: verify chữ ký, đúng proposer, đúng parent
     alt Header hợp lệ
-        R->>P: BODY_REQUEST(block_hash)
-        P->>R: BODY (danh sách tx)
+        R->>P: BODY_REQUEST block_hash
+        P->>R: BODY: danh sách tx
         R->>R: kiểm tra tx_root khớp header, validate block
         R->>R: giờ R có body → chuyển tiếp HEADER cho neighbor của R
     else Header sai
@@ -507,22 +566,56 @@ sequenceDiagram
     end
 ```
 
-### Rate limit & peer blocking
+### Block sync: node vào trễ hoặc vừa restart bắt kịp chain
 
-Mỗi node chỉ gửi tối đa N message mỗi đơn vị thời gian (outbound). Neighbor nào gửi tới quá nhiều → tạm **block** một thời gian rồi **unblock**. Mọi sự kiện này phải được log.
+**Vấn đề:** V8 bị tắt lúc chain ở height 3, bật lại lúc các node khác đã ở height 7. V8 chỉ có block 1–3. Nó không vote được cho height 7, vì nó chưa biết block 4–6 nên không kiểm tra được `parent_hash` và state. Nếu không xử lý, V8 sẽ **kẹt mãi** ở height 4. Tình huống tương tự xảy ra khi một node bật lên trễ, sau khi chain đã chạy.
+
+- Chain vẫn chạy tiếp, vì chỉ cần 2f + 1 node hoạt động. Nhưng V8 thì vô dụng cho tới khi bắt kịp.
+- **Block sync** là cách V8 bắt kịp: hỏi neighbor "cho tôi các block từ height 4", nhận về block 4–6, kiểm tra, apply, rồi tham gia consensus ở height 7.
+- **Không cần tin neighbor:** mỗi block gửi kèm **commit certificate** = 2f + 1 PRECOMMIT có chữ ký cho block đó. V8 tự verify các chữ ký; nếu đủ quorum thì block đó chắc chắn đã được finalize. Neighbor Byzantine không làm giả được certificate, vì không giả được chữ ký của honest validator.
+- **Liên hệ slides:** đây là phiên bản nhỏ của **full sync** trong slide về synchronization modes: replay các block từ peer và tự verify từng block.
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Normal
-    Normal --> Normal: message trong hạn mức
-    Normal --> Blocked: vượt hạn mức (log: block)
-    Blocked --> Blocked: message bị bỏ qua
-    Blocked --> Normal: hết thời gian block (log: unblock)
+sequenceDiagram
+    participant V8 as V8 vừa restart, có tới height 3
+    participant N as Neighbor, đang ở height 7
+    V8->>N: HELLO
+    N->>V8: HELLO, kèm height hiện tại = 6 đã finalize
+    V8->>N: GET_BLOCKS from_height = 4
+    N->>V8: BLOCKS: block 4, 5, 6, mỗi block kèm 2f+1 PRECOMMIT
+    V8->>V8: verify certificate, apply block 4 → 5 → 6
+    Note over V8: Bắt kịp → tham gia consensus height 7
+```
+
+### Rate limit & peer blocking
+
+Mỗi node chỉ gửi tối đa N message mỗi đơn vị thời gian, gọi là outbound rate limit. Neighbor nào gửi tới quá nhiều → tạm **block** một thời gian rồi **unblock**. Mọi sự kiện này phải được log.
+
+**Chiều nhận**, mỗi message tới từ một neighbor:
+
+```mermaid
+flowchart TD
+    IN["Message tới từ neighbor X"] --> Q1{"X đang bị block?"}
+    Q1 -- "có" --> DROP["Bỏ message"]
+    Q1 -- "không" --> Q2{"X đã gửi quá N message<br/>trong 1 giây vừa qua?"}
+    Q2 -- "không" --> OK["Xử lý message bình thường"]
+    Q2 -- "có" --> BLK["Block X trong T giây<br/>log: block"]
+    BLK --> DROP
+    BLK -. "sau T giây" .-> UNB["Unblock X<br/>log: unblock<br/>message sau đó lại được xử lý"]
+```
+
+**Chiều gửi**, outbound rate limit:
+
+```mermaid
+flowchart LR
+    SEND["Node muốn gửi message<br/>tới neighbor X"] --> Q{"Đã gửi tới X đủ N message<br/>trong 1 giây vừa qua?"}
+    Q -- "chưa" --> GO["Gửi ngay"]
+    Q -- "đủ rồi" --> WAIT["Xếp hàng chờ<br/>sang giây tiếp theo mới gửi"]
 ```
 
 ### Network event log
 
-Mỗi node tự ghi file log của mình. Mỗi `send / deliver / drop / delay / duplicate / block / unblock` ghi 1 dòng: `time, node_id, event_type, height, ...`. Log là **bằng chứng** chấm điểm.
+Mỗi node tự ghi file log của mình. Các event `send`, `deliver`, `drop`, `delay`, `duplicate`, `block`, `unblock`, `peer_added`, `peer_removed` mỗi cái ghi 1 dòng: `time, node_id, event_type, height, ...`. Log là **bằng chứng** chấm điểm.
 
 ---
 
@@ -685,16 +778,17 @@ sequenceDiagram
     Note over X,Y: ❌ B và C cùng finalized ở height h
 ```
 
-Trạng thái lock của một validator:
+Một validator đã lock B quyết định prevote thế nào ở các round sau:
 
 ```mermaid
-stateDiagram-v2
-    [*] --> Unlocked
-    Unlocked --> Locked_B: thấy polka cho B ở round r<br/>(locked_round = r)
-    Locked_B --> Locked_B: round mới, proposal khác<br/>→ vẫn chỉ prevote B (hoặc NIL)
-    Locked_B --> Locked_C: thấy polka cho C<br/>ở round r' > locked_round
-    Locked_B --> Unlocked: B finalized → sang height mới
-    Locked_C --> Unlocked: C finalized → sang height mới
+flowchart TD
+    U["Unlocked<br/>chưa lock block nào ở height này"] -- "thấy polka cho B ở round r" --> LB["Locked B<br/>locked_block = B, locked_round = r"]
+    LB --> Q{"Round mới:<br/>proposal là block nào?"}
+    Q -- "vẫn là B" --> PB["Prevote B"]
+    Q -- "block khác, C" --> Q2{"Có polka cho C ở round<br/>mới hơn locked_round?"}
+    Q2 -- "không" --> PN["Prevote NIL<br/>vẫn giữ lock B"]
+    Q2 -- "có" --> LC["Đổi lock sang C<br/>locked_round = round đó<br/>prevote C"]
+    FIN["Block của height này được finalize"] -- "sang height mới, xóa lock" --> U2["Unlocked ở height mới"]
 ```
 
 ### Vote rules cần code (section 6.1)
@@ -741,130 +835,114 @@ flowchart LR
 
 ---
 
-## Tầng 5 – Determinism & hai chế độ chạy
+## Tầng 5 – Determinism & reproducibility
 
-Yêu cầu T8: chạy cùng config + cùng seed 2 lần → **log giống nhau từng byte** (hai file log giống hệt nhau tới từng ký tự, kể cả thứ tự dòng) và cùng final state hash.
+**Yêu cầu T8, theo giải thích của thầy:** mục tiêu của "byte-identical" là khi thầy chạy lại thì ra **đúng kết quả nhóm đã nộp**, để không có tranh cãi. Timestamp và thứ tự event được phép khác nhau giữa các lần chạy; ngoài timestamp, hầu như luôn làm được scenario byte-identical.
 
-**Mâu thuẫn cần hiểu:** trên mạng thật (nhiều process, nhiều VM), thời điểm message tới phụ thuộc vào máy, mạng, hệ điều hành. Chạy 2 lần sẽ **không bao giờ** ra log giống nhau từng byte, dù cùng seed. Vậy không thể vừa chạy P2P thật vừa đạt T8 nếu chỉ có một cách chạy.
+### Vì sao chạy 2 lần lại có thể ra khác nhau
 
-**Giải pháp: cùng một code node, hai chế độ chạy.** Phần logic của node (consensus, execution, crypto, gossip) **viết một lần**, không biết mình đang chạy ở chế độ nào. Chỉ có 2 thứ được thay: **cách gửi message (transport)** và **cách lấy thời gian (clock)**.
+10 process chạy song song trên network thật. Thời điểm một message tới phụ thuộc vào CPU, hệ điều hành, mạng; lần này V3 nhận vote của V1 trước vote của V2, lần sau thì ngược lại. Hệ quả:
 
-| | Real mode (P2P thật) | Sim mode (mô phỏng) |
-| --- | --- | --- |
-| Mỗi node là | Một process riêng, có thể trên VM khác | Một object Python, tất cả trong 1 process |
-| Gửi message bằng | TCP thật (`asyncio`) | Đẩy vào event queue trong RAM |
-| Thời gian | Đồng hồ thật | Thời gian giả `sim.now` |
-| Delay/drop/dup | Fault injection + mạng thật | Fault injection |
-| Log chạy lại có giống từng byte? | **Không** (mạng thật không lặp lại được) | **Có** |
-| Dùng để | Demo P2P nhiều VM, chứng minh chạy được thật | T1–T8 tự động, đặc biệt **T8** |
+- **Timestamp và thứ tự dòng trong log** gần như chắc chắn khác nhau. Thầy chấp nhận điều này.
+- **Kết quả** như block nào được finalize, ở round nào, state hash là gì, **có thể** khác nhau nếu code để timing ảnh hưởng tới quyết định. Đây là thứ phải chặn.
 
-```mermaid
-flowchart TD
-    subgraph Logic["Node logic – viết 1 lần, dùng chung"]
-        CONS["Consensus"]
-        EXE["Execution"]
-        GOS["Gossip + fault injection"]
-    end
-    Logic --> IF["Chỉ gọi 2 interface:<br/>transport.send(...) và clock.now() / clock.call_later(...)"]
-    IF --> REAL
-    IF --> SIM
-    subgraph REAL["Real mode"]
-        R1["TcpTransport (asyncio)"]
-        R2["RealClock (đồng hồ thật)"]
-        R3["Mỗi node 1 process,<br/>chạy trên nhiều VM"]
-    end
-    subgraph SIM["Sim mode"]
-        S1["SimTransport (event queue)"]
-        S2["SimClock (sim.now)"]
-        S3["Mọi node trong 1 process,<br/>1 thread"]
-    end
-```
+### Tách output làm 2 loại
 
-*Vì cả hai chế độ dùng chung node logic, khi sim mode chạy đúng thì logic cũng đúng ở real mode. Khác biệt chỉ còn ở phần chuyển message.*
+| Output | Nằm ở | Có timestamp | Yêu cầu |
+| --- | --- | --- | --- |
+| Event log | `logs/<scenario>/<node>.jsonl` | Có | Để debug, làm bằng chứng; được phép khác nhau |
+| Results | `logs/results/<scenario>/<node>.json` + `verdict.json` | Không | **Byte-identical** giữa mọi lần chạy, trên mọi máy |
 
-**Cần xác nhận với giảng viên:** cách giải thích "T8 chạy ở sim mode, còn real mode dùng để demo P2P" có được chấp nhận không.
+**Results của mỗi node** gồm: finalized chain với `height, round, proposer, block_hash, state_hash`, final state hash, số lần reject theo từng reason, danh sách equivocation phát hiện được, neighbor set. Mọi thứ ghi bằng `encode()`, nên cùng nội dung thì cùng bytes.
 
-### Sim mode: Discrete-event simulation (DES)
+### Loại bỏ từng nguồn khác biệt
 
-- **Ý tưởng:** không có thời gian thật. Có một **event queue** (Python `heapq`) chứa các sự kiện `(time, seq, event)`. Vòng lặp chính: lấy event có `time` nhỏ nhất, xử lý nó, việc xử lý có thể sinh event mới vào queue.
-- **Ví dụ:** node A gửi vote lúc t=10, fault injection chọn delay 7 → push event `DELIVER` lúc t=17 cho node B. Timeout cũng là event: `TIMEOUT(h, r)` lúc t=10+100.
-- **`seq`:** một bộ đếm tăng dần, để 2 event cùng `time` luôn được xử lý theo cùng thứ tự (tie-breaker). Thiếu cái này là log lệch ngay.
-- **Topology:** sim mode đọc cùng file topology như real mode; chỉ bỏ qua `host`/`port`.
+| Nguồn khác biệt | Cách loại bỏ |
+| --- | --- |
+| Key sinh ngẫu nhiên | Sinh từ seed: `keypair_from_seed(seed, node_id)` |
+| Tx tới mempool lúc nào | Client gửi toàn bộ tx của scenario trong lúc warmup, trước height 1; mempool lấy tx theo `(sender, nonce)` |
+| Topology | Chọn neighbor bằng `sha256(seed, self, peer)`, xem Tầng 3 |
+| Message nào bị drop, duplicate, delay bao lâu | Tính bằng hash của message, không bằng random tuần tự, xem bên dưới |
+| Ranh giới GST | Theo height, không theo đồng hồ |
+| Message vừa kịp hay vừa trễ timeout | Delay hai cực, xem bên dưới |
+| Byzantine làm gì | Ghi rõ trong scenario: node nào, height nào, làm gì |
+| Thứ tự duyệt `set` / `dict` | `sorted(...)` trước khi duyệt |
+| Hàm `hash()` của Python, `id(obj)` | Không dùng cho bất cứ thứ gì vào results, chain hay gửi qua network |
+| Phiên bản thư viện | Ghi version cố định cho mọi dependency |
+
+### Vì sao random tuần tự không được, còn hash thì được
+
+**Random tuần tự:** `rng.random()` trả số tiếp theo trong một dãy cố định. Lần gọi thứ 1 luôn ra cùng số, lần thứ 2 luôn ra cùng số, v.v. Vấn đề: **message nào được gọi `rng` trước phụ thuộc vào timing**. Lần chạy 1, vote A gọi trước và bị drop; lần chạy 2, vote B gọi trước nên vote B bị drop. Cùng seed mà kết quả khác.
+
+**Hash của message:** `sha256(seed, src, dst, message_id)` chỉ phụ thuộc vào chính message đó. Vote A trên đường V1 → V3 **luôn** có cùng số phận, bất kể nó được xử lý trước hay sau message khác.
 
 ```mermaid
 flowchart TD
-    START["Khởi tạo: push các event ban đầu<br/>(start_round, tx của client)"] --> LOOP{"Queue còn event<br/>và now < until?"}
-    LOOP -- có --> POP["heappop → (time, seq, event)<br/>sim.now = time"]
-    POP --> HANDLE["Xử lý event<br/>(deliver message, timeout, ...)"]
-    HANDLE --> PUSH["Có thể push event mới<br/>(time = now + delay, seq += 1)"]
-    PUSH --> LOOP
-    LOOP -- không --> DONE["Kết thúc: in ledger + state_hash"]
+    subgraph Seq["❌ rng tuần tự"]
+        S1["Lần 1: A gọi trước → số thứ 1 → drop A"]
+        S2["Lần 2: B gọi trước → số thứ 1 → drop B"]
+    end
+    subgraph Hash["✅ hash của message"]
+        H1["Lần 1: hash(A) → drop A, hash(B) → gửi B"]
+        H2["Lần 2: hash(B) → gửi B, hash(A) → drop A"]
+    end
 ```
 
-Ví dụ nội dung queue tại một thời điểm:
+### Delay hai cực: tránh "vừa kịp, vừa trễ"
 
-| time | seq | event |
-| --- | --- | --- |
-| 17 | 42 | DELIVER vote V0 → V3 |
-| 17 | 43 | DELIVER vote V0 → V5 |
-| 25 | 44 | DELIVER proposal V3 → V1 |
-| 110 | 45 | TIMEOUT V2 (h=3, r=0, propose) |
+Giả sử timeout là 1000 ms và một vote bị delay 995 ms. Lần chạy 1, CPU nhanh, vote tới ở 998 ms: kịp. Lần chạy 2, CPU bận, vote tới ở 1003 ms: trễ, node vote NIL, kết quả khác hẳn.
 
-### Real mode: mỗi node một process
+**Cách tránh:** delay chỉ nằm ở **hai cực**, không bao giờ ở gần timeout:
 
-- Mỗi node chạy bằng một lệnh riêng, ví dụ `python -m lab01.run_node --id V3 --config config/topology.json`.
-- Node mở một TCP server ở port của mình, rồi chủ động kết nối tới các neighbor trong topology. Neighbor chưa bật thì thử lại sau vài giây.
-- `asyncio` lo việc nhận/gửi trên nhiều kết nối cùng lúc trong 1 process. Timeout dùng `loop.call_later(...)` qua interface clock.
-- Chạy thử trên 1 máy: một script bật 10 process với 10 port khác nhau trên `127.0.0.1`. Chạy thật: copy code lên từng VM, mỗi VM bật node của nó.
-- Kiểm tra đúng: mỗi node in ra ledger cuối cùng; so block hash từng height giữa các node. Phải giống nhau (safety), dù log thì khác nhau mỗi lần chạy.
-
-### Seeded randomness
-
-Mọi chỗ cần random (delay, drop, chọn neighbor khi sinh topology) đều dùng **một** `random.Random(seed)` được truyền vào, không bao giờ gọi `random.random()` toàn cục. Cùng seed → cùng dãy số → cùng kịch bản. Ở real mode, mỗi node dùng seed riêng, ví dụ `seed + số thứ tự node`.
+- **Delay ngắn:** ≤ 10% timeout, cộng cả độ trễ thật của mạng vẫn chắc chắn tới kịp.
+- **Delay dài:** ≥ 2× timeout, chắc chắn tới trễ, giả lập "mạng hỗn loạn trước GST".
 
 ```mermaid
 flowchart LR
-    SEED["seed = 42"] --> RNG["random.Random(42)"]
-    RNG --> D1["delay = 7"]
-    RNG --> D2["drop? = no"]
-    RNG --> D3["dup? = yes"]
-    D1 --> SAME["Chạy lại seed 42<br/>→ đúng dãy này lần nữa"]
-    D2 --> SAME
-    D3 --> SAME
+    A["0 ms"] --> B["Vùng delay ngắn<br/>0 – 100 ms<br/>chắc chắn kịp"]
+    B --> C["Vùng cấm<br/>100 – 2000 ms<br/>không bao giờ chọn"]
+    C --> D["Vùng delay dài<br/>≥ 2000 ms<br/>chắc chắn trễ"]
+    style C stroke-dasharray: 5 5
 ```
+
+*Ví dụ với timeout 1000 ms. Khi chạy qua ZeroTier, độ trễ thật giữa 2 máy cũng phải nằm gọn trong vùng ngắn; kiểm tra bằng `ping` trước khi chọn timeout.*
+
+### Kiểm tra: chạy 2 lần, so results
+
+```mermaid
+flowchart LR
+    SC["Scenario config<br/>seed, tx, fault, Byzantine"] --> R1["Lần chạy 1"]
+    SC --> R2["Lần chạy 2"]
+    SC --> R3["Lần chạy của thầy"]
+    R1 --> O1["logs/results/ 1"]
+    R2 --> O2["logs/results/ 2"]
+    R3 --> O3["logs/results/ của thầy"]
+    O1 --> CMP{"byte-identical?"}
+    O2 --> CMP
+    O3 --> CMP
+    CMP -- có --> OK["T8 PASS"]
+    CMP -- không --> BAD["Diff results, đối chiếu<br/>bảng nguồn khác biệt"]
+```
+
+Results giống nhau dù chạy trên 1 máy hay 2 máy qua ZeroTier, vì không có thứ gì trong results phụ thuộc vào máy hay timing. Đây cũng là một điểm mạnh để trình bày khi vấn đáp.
 
 ### Những thứ phá determinism trong Python
 
-Luật này áp dụng cho **node logic**. Riêng `TcpTransport` và `RealClock` (chỉ dùng ở real mode) được phép dùng `asyncio` và đồng hồ thật.
-
 | Kẻ phá | Thay bằng |
 | --- | --- |
-| `time.time()`, `datetime.now()` trong node logic | `clock.now()` (sim mode trả về `sim.now`) |
-| `random.random()` toàn cục | `self.rng` có seed |
+| `random.random()` để quyết định fault | Hash của `(seed, src, dst, message_id)` |
+| `time.time()` để quyết định GST | `gst_height` |
 | Duyệt `set` / dict khi thứ tự quan trọng | `sorted(...)` trước khi duyệt |
-| Gọi `asyncio`, `threading`, socket trực tiếp trong node logic | Chỉ gọi qua interface `transport` / `clock` |
-| `id(obj)`, `hash(str)` (bị random hóa mỗi lần chạy) | Hash SHA-256 của nội dung |
-| Sinh key ngẫu nhiên mỗi lần chạy | Sinh key từ seed cố định (`sha256(seed + node_id)` làm secret key) |
+| `id(obj)`, `hash(str)` của Python, bị random hóa mỗi lần chạy | SHA-256 của nội dung |
+| Sinh key ngẫu nhiên mỗi lần chạy | `keypair_from_seed(seed, node_id)` |
 | `json.dumps` thiếu `sort_keys` | Hàm `encode()` chung |
+| Ghi timestamp vào results | Timestamp chỉ ghi vào event log |
 
-### Log
-
-- Một dòng một event, định dạng cố định (ví dụ JSON lines với `sort_keys=True`).
-- Script T8 (sim mode): chạy 2 lần, so sánh file log bằng hash (`sha256` của cả file) và so sánh final state hash.
-
-```mermaid
-flowchart LR
-    CFG["config + seed<br/>(sim mode)"] --> RUN1["Lần chạy 1"] --> L1["log_1 + state_hash_1"]
-    CFG --> RUN2["Lần chạy 2"] --> L2["log_2 + state_hash_2"]
-    L1 --> CMP{"sha256(log_1) == sha256(log_2)<br/>và state_hash bằng nhau?"}
-    L2 --> CMP
-    CMP -- có --> PASS["T8 PASS"]
-    CMP -- không --> FAIL["T8 FAIL → diff tìm dòng<br/>đầu tiên khác nhau"]
-```
+`time` và `asyncio` vẫn được dùng bình thường cho timeout và network. Chúng chỉ không được **quyết định** điều gì đi vào results.
 
 ### Lưu ý về "Random seeds không phải cryptographic randomness"
 
-Đề nói seed của simulator không phải nguồn random an toàn cho crypto. Sinh key từ seed là **chấp nhận được cho mô phỏng**, nhưng nên ghi rõ trong REPORT rằng ngoài đời thật phải dùng `os.urandom`/`secrets`.
+Đề nói seed không phải nguồn random an toàn cho crypto. Sinh key từ seed là **chấp nhận được cho lab**, vì nó giúp reproduce, nhưng nên ghi rõ trong REPORT rằng ngoài đời thật phải dùng `os.urandom` hoặc `secrets`.
 
 ---
 
@@ -876,7 +954,7 @@ Slides là "bức tranh lớn" về node ngoài đời thật. Lab chỉ làm ph
 
 ```mermaid
 flowchart TD
-    P2P["P2P Network<br/>✅ lab: TCP thật giữa các VM + fault injection"]
+    P2P["P2P Network<br/>✅ lab: TCP, discovery, gossip, fault injection"]
     CON["Consensus Engine<br/>✅ lab: Tendermint-style"]
     EXE["Execution Engine<br/>✅ lab: key–value state"]
     DB["State / History DB<br/>✅ lab: ledger + state trong RAM của từng node"]
@@ -904,11 +982,11 @@ flowchart LR
 | Processing pipeline (receive → validate → execute → commit → serve) | Thứ tự xử lý block | **Làm bước 1–4**, dedup ở bước 1 |
 | Merkle Patricia Trie, Merkle proof | Cây hash cho state, chứng minh từng key | Tùy chọn; hash cả state đã sorted là đủ |
 | Block header / body / receipts | Header nhỏ, body chứa tx | Header + body, **không cần receipts/gas** |
-| Full / Snap / Checkpoint sync | Đổi tốc độ khởi động lấy mức độ tin tưởng | Không làm |
+| Full / Snap / Checkpoint sync | Đổi tốc độ khởi động lấy mức độ tin tưởng | Làm phiên bản nhỏ của full sync: **block sync** cho node vào trễ hoặc restart, xem Tầng 3 |
 | Reorganization (reorg) | Chain kiểu Bitcoin có thể đổi nhánh | **Không có reorg sau finality**. Nên viết rõ điểm khác biệt này trong report |
 | Crash recovery, WAL | Ghi ý định trước khi commit | Không bắt buộc; liên hệ: validator phải nhớ đã ký vote gì để không ký 2 lần |
 | RPC, rate limit, API security | Chống spam ở cổng public | Ý tưởng rate limit xuất hiện ở network layer (block overactive peers) |
-| P2P network | Node nói chuyện trực tiếp với peer, không có server trung tâm | **Làm thật**: TCP giữa các process/VM, gossip qua neighbor |
+| P2P network | Node nói chuyện trực tiếp với peer, không có server trung tâm | **Làm thật**: TCP giữa các process, trên một hoặc nhiều máy qua ZeroTier, gossip qua neighbor |
 | Geth / Erigon / Nethermind | Mỗi client tối ưu một bottleneck | Chỉ tham khảo |
 
 Node roles theo slides (lab chỉ có full node):
@@ -1061,31 +1139,44 @@ flowchart LR
 | Gossip (flooding) | Nhận message mới thì chuyển tiếp cho mọi neighbor; message đã thấy thì bỏ qua |
 | Broadcast | Gửi tới mọi node trong mạng (thực hiện bằng gossip) |
 | Fault injection | Lớp chủ động delay/drop/duplicate message theo config + seed |
-| Real mode / Sim mode | Chạy P2P thật trên nhiều process/VM / chạy mô phỏng 1 process, deterministic |
-| Transport / Clock | 2 interface node logic dùng để gửi message và lấy thời gian; mỗi chế độ có bản riêng |
+| Peer discovery | Cách node tự tìm địa chỉ của các node khác |
+| Multicast beacon | Gói UDP gửi tới một nhóm multicast trong LAN để báo "tôi ở đây" |
+| Address book | Danh sách `node_id → địa chỉ` mà node đã biết |
+| HELLO handshake | Hai bên trao đổi node_id có chữ ký ngay khi mở TCP connection |
+| ZeroTier | LAN ảo nối các máy ở nơi khác nhau, hỗ trợ multicast |
+| Block sync | Node vào trễ xin neighbor các block đã finalize, kèm commit certificate |
+| Commit certificate | 2f + 1 PRECOMMIT có chữ ký, chứng minh một block đã finalize |
+| Event log / Results | Log có timestamp, được khác nhau / kết quả không timestamp, phải byte-identical |
 
 Bản đồ khái niệm (mỗi mũi tên = "cần hiểu cái này trước"):
 
 ```mermaid
-flowchart LR
-    HASH["Hash"] --> BLOCK["Block / chain"]
-    ENC["Canonical encoding"] --> HASH
-    ENC --> SIG["Signature"]
-    SIG --> DOM["Domain separation"]
-    SIG --> TX["Transaction"]
-    TX --> NONCE["Nonce (chống replay)"]
-    TX --> STATE["State transition"]
-    STATE --> BLOCK
-    BLOCK --> PROP["Proposal"]
-    SIG --> VOTE["Vote"]
-    VOTE --> QUO["Quorum 2f+1"]
-    QUO --> POLKA["Polka"]
-    POLKA --> LOCK["Lock"]
-    LOCK --> SAFE["Safety"]
-    QUO --> FIN["Finality"]
-    GST["Partial synchrony / GST"] --> TIMEOUT["Timeout / round"]
-    TIMEOUT --> LIVE["Liveness"]
-    DES["DES + seed"] --> DET["Byte-identical log (T8)"]
+flowchart TD
+    subgraph L2["Tầng 2 – Cryptography"]
+        ENC["Canonical encoding"] --> HASH["Hash"]
+        ENC --> SIG["Signature"]
+        SIG --> DOM["Domain separation"]
+    end
+    subgraph L1["Tầng 1 – Blockchain"]
+        TX["Transaction + nonce"] --> STATE["State transition"] --> BLOCK["Block / chain"]
+    end
+    subgraph L3["Tầng 3 – Network"]
+        DISC["Peer discovery"] --> GOS["Gossip"]
+        GST["Partial synchrony / GST"]
+    end
+    subgraph L4["Tầng 4 – Consensus"]
+        VOTE["Vote"] --> QUO["Quorum 2f+1"]
+        QUO --> POLKA["Polka"] --> LOCK["Lock"] --> SAFE["Safety"]
+        QUO --> FIN["Finality"]
+        TIMEOUT["Timeout / round"] --> LIVE["Liveness"]
+    end
+    subgraph L5["Tầng 5 – Reproducibility"]
+        FH["Fault theo hash của message"] --> RES["Results byte-identical, T8"]
+    end
+    L2 --> L1
+    L1 --> L4
+    L3 --> L4
+    L4 --> L5
 ```
 
 ### Checklist: trả lời được hết là đủ để dẫn team
@@ -1101,5 +1192,7 @@ flowchart LR
 - [ ] Proposer chết thì chuyện gì xảy ra, từng bước?
 - [ ] Vì sao không được dùng `time.time()` trong node logic?
 - [ ] V0 không nối trực tiếp tới V5, vậy vote của V0 tới V5 bằng cách nào? Vì sao message không bị chuyển tiếp vô hạn?
-- [ ] Vì sao cần cả real mode lẫn sim mode? Test T8 chạy ở chế độ nào?
+- [ ] Node mới bật lên tìm được các node khác bằng cách nào? Vì sao multicast chỉ dùng để tìm peer, không dùng để gửi vote?
+- [ ] Vì sao quyết định drop/delay phải tính bằng hash của message thay vì `rng.random()`?
+- [ ] Một node restart sau khi chain đã đi tiếp thì bắt kịp bằng cách nào, và vì sao không cần tin neighbor?
 - [ ] Vì sao lab không có reorg, trong khi slides có nói về reorg?
