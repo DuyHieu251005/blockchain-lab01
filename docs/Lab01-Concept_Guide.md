@@ -31,13 +31,13 @@ flowchart BT
     style T4 stroke-width:3px
 ```
 
-| Tầng | Chủ đề | Câu hỏi nó trả lời | Mức cần hiểu |
-| --- | --- | --- | --- |
-| 1 | Nền tảng blockchain | Dữ liệu được tổ chức thế nào? | Phải hiểu chắc |
-| 2 | Cryptography | Làm sao biết message là thật? | Hiểu ý tưởng, không cần toán |
-| 3 | Network P2P | Message đi giữa các node (nhiều VM) thế nào, hỏng ra sao? | Hiểu neighbor, gossip, các loại lỗi |
-| 4 | Consensus BFT | Làm sao nhiều node đồng ý một block? | Phần khó nhất, đọc 2–3 lần |
-| 5 | Determinism | Vì sao cần 2 chế độ chạy, làm sao chạy lại ra y hệt? | Hiểu nguyên tắc |
+| Tầng | Chủ đề              | Câu hỏi nó trả lời                                        | Mức cần hiểu                        |
+| ---- | ------------------- | --------------------------------------------------------- | ----------------------------------- |
+| 1    | Nền tảng blockchain | Dữ liệu được tổ chức thế nào?                             | Phải hiểu chắc                      |
+| 2    | Cryptography        | Làm sao biết message là thật?                             | Hiểu ý tưởng, không cần toán        |
+| 3    | Network P2P         | Message đi giữa các node (nhiều VM) thế nào, hỏng ra sao? | Hiểu neighbor, gossip, các loại lỗi |
+| 4    | Consensus BFT       | Làm sao nhiều node đồng ý một block?                      | Phần khó nhất, đọc 2–3 lần          |
+| 5    | Determinism         | Vì sao cần 2 chế độ chạy, làm sao chạy lại ra y hệt?      | Hiểu nguyên tắc                     |
 
 Mỗi khái niệm có 3 phần: **là gì**, **vì sao cần**, **trong code Python trông thế nào**. Cuối doc có walk-through một block đi từ đầu đến cuối và một checklist tự kiểm tra: trả lời được hết checklist là đủ để dẫn team.
 
@@ -64,7 +64,7 @@ flowchart LR
     H2 -- "parent_hash" --> H1
 ```
 
-*Mỗi header trỏ ngược về block cha bằng hash. Sửa một block cũ → hash đổi → mọi block sau "đứt xích".*
+_Mỗi header trỏ ngược về block cha bằng hash. Sửa một block cũ → hash đổi → mọi block sau "đứt xích"._
 
 ### State
 
@@ -96,10 +96,10 @@ flowchart TD
 ### Block
 
 - **Là gì:** một gói tx có thứ tự, gồm 2 phần:
-    - **Header** (nhỏ): `height`, `parent_hash`, `state_hash`, `proposer`, `tx_root` (hash của danh sách tx), chữ ký proposer.
-    - **Body** (lớn): danh sách tx.
+  - **Header** (nhỏ): `height`, `parent_hash`, `state_hash`, `proposer`, `tx_root` (hash của danh sách tx), chữ ký proposer.
+  - **Body** (lớn): danh sách tx.
 - **parent_hash** trỏ tới block trước → các block nối thành chuỗi. Sửa 1 block cũ thì hash nó đổi, mọi block sau bị "đứt xích".
-- **state_hash** = hash của state *sau khi* apply các tx trong block. Hai node apply cùng block mà ra state_hash khác nhau = có bug determinism.
+- **state_hash** = hash của state _sau khi_ apply các tx trong block. Hai node apply cùng block mà ra state_hash khác nhau = có bug determinism.
 - **Height:** số thứ tự block (genesis = 0, rồi 1, 2, 3...).
 
 ### State transition (hàm chuyển trạng thái)
@@ -112,7 +112,7 @@ flowchart LR
     S1 -- "Block 2<br/>Bob/message = hi" --> S2["State 2<br/>{Alice/message: hello,<br/>Bob/message: hi}"]
 ```
 
-*Node nào apply cùng các block theo cùng thứ tự cũng phải ra đúng State 2 này.*
+_Node nào apply cùng các block theo cùng thứ tự cũng phải ra đúng State 2 này._
 
 ### Ledger vs View
 
@@ -224,7 +224,7 @@ flowchart LR
     W --> V
 ```
 
-*Hai bên đều tự encode. Vì vậy encode phải ra cùng bytes ở mọi node, nếu không chữ ký thật cũng bị báo sai.*
+_Hai bên đều tự encode. Vì vậy encode phải ra cùng bytes ở mọi node, nếu không chữ ký thật cũng bị báo sai._
 
 - **Dùng ở:** tx (participant ký), block header (proposer ký), vote (validator ký).
 - **Python:** thư viện `cryptography` hoặc `PyNaCl`. Ed25519 có tính chất: **cùng key + cùng message → luôn ra đúng cùng một chữ ký**. Nhờ vậy chạy lại 2 lần thì log giống hệt nhau (test T8).
@@ -286,11 +286,11 @@ sequenceDiagram
 
 **Áp vào lab:** đề yêu cầu nhãn cho cả 3 loại message được ký. `lab01` là tên chain, cũng là một nhãn, để chữ ký từ chain khác không dùng được ở chain này.
 
-| Loại message | Nhãn ghi ở đầu trước khi ký | Bên trong ghi thêm |
-| --- | --- | --- |
-| Transaction | `TX:lab01` | sender, key, value, nonce |
-| Block header | `HEADER:lab01` | height, round, parent_hash, state_hash, ... |
-| Vote | `VOTE:lab01` | **phase (PREVOTE/PRECOMMIT)**, height, round, block_hash |
+| Loại message | Nhãn ghi ở đầu trước khi ký | Bên trong ghi thêm                                       |
+| ------------ | --------------------------- | -------------------------------------------------------- |
+| Transaction  | `TX:lab01`                  | sender, key, value, nonce                                |
+| Block header | `HEADER:lab01`              | height, round, parent_hash, state_hash, ...              |
+| Vote         | `VOTE:lab01`                | **phase (PREVOTE/PRECOMMIT)**, height, round, block_hash |
 
 ```python
 sig = sign(secret_key, b"VOTE:lab01" + encode(vote))
@@ -326,7 +326,7 @@ flowchart TD
     style H34 stroke-dasharray: 5 5
 ```
 
-*Merkle proof cho key Alice = H2 và H34 (nét đứt). Verifier tự tính H1 → H12 → Root rồi so với root đã biết.*
+_Merkle proof cho key Alice = H2 và H34 (nét đứt). Verifier tự tính H1 → H12 → Root rồi so với root đã biết._
 
 ---
 
@@ -357,7 +357,7 @@ flowchart TD
     N0 <-- TCP --> N4
 ```
 
-*Mỗi node là một process; một VM có thể chạy một hay nhiều node. Mỗi node chỉ nối TCP tới các neighbor của nó, không nối tới tất cả.*
+_Mỗi node là một process; một VM có thể chạy một hay nhiều node. Mỗi node chỉ nối TCP tới các neighbor của nó, không nối tới tất cả._
 
 ### Peer, neighbor và topology
 
@@ -367,11 +367,15 @@ flowchart TD
 ```json
 {
   "nodes": {
-    "V0": {"host": "192.168.1.11", "port": 9000},
-    "V1": {"host": "192.168.1.11", "port": 9001},
-    "V2": {"host": "192.168.1.12", "port": 9000}
+    "V0": { "host": "192.168.1.11", "port": 9000 },
+    "V1": { "host": "192.168.1.11", "port": 9001 },
+    "V2": { "host": "192.168.1.12", "port": 9000 }
   },
-  "edges": [["V0", "V1"], ["V0", "V2"], ["V1", "V2"]]
+  "edges": [
+    ["V0", "V1"],
+    ["V0", "V2"],
+    ["V1", "V2"]
+  ]
 }
 ```
 
@@ -400,8 +404,8 @@ Vì mỗi node chỉ nối tới neighbor, một message muốn tới **mọi** 
 
 1. Node tạo message (vote, header, tx) → gửi cho **mọi neighbor**.
 2. Node nhận một message:
-    - Đã thấy message này rồi (so theo **message id** = hash của message) → **bỏ qua, không chuyển tiếp**.
-    - Chưa thấy → ghi nhớ id, xử lý, rồi **gửi tiếp cho mọi neighbor trừ người vừa gửi cho mình**.
+   - Đã thấy message này rồi (so theo **message id** = hash của message) → **bỏ qua, không chuyển tiếp**.
+   - Chưa thấy → ghi nhớ id, xử lý, rồi **gửi tiếp cho mọi neighbor trừ người vừa gửi cho mình**.
 
 ```mermaid
 flowchart LR
@@ -413,13 +417,13 @@ flowchart LR
     V3 -- 3 --> V5((V5))
 ```
 
-*Số trên mũi tên là chặng thứ mấy. V3 nhận cùng một vote 2 lần (từ V1 và V2): lần thứ hai bị bỏ qua nhờ message id, nên không chuyển tiếp vô hạn.*
+_Số trên mũi tên là chặng thứ mấy. V3 nhận cùng một vote 2 lần (từ V1 và V2): lần thứ hai bị bỏ qua nhờ message id, nên không chuyển tiếp vô hạn._
 
 **Dedup (bỏ trùng) có 2 lớp, đừng nhầm:**
 
-| Lớp | Bỏ trùng theo | Mục đích |
-| --- | --- | --- |
-| Network (gossip) | message id (hash của cả message) | Không chuyển tiếp một message nhiều lần |
+| Lớp                | Bỏ trùng theo                     | Mục đích                                |
+| ------------------ | --------------------------------- | --------------------------------------- |
+| Network (gossip)   | message id (hash của cả message)  | Không chuyển tiếp một message nhiều lần |
 | Consensus (rule 7) | (validator, height, round, phase) | Không đếm 2 vote của cùng một validator |
 
 ### Fault injection: tự tạo mạng không ổn định
@@ -439,14 +443,14 @@ flowchart LR
 
 ### 4 kiểu lỗi mạng
 
-| Lỗi | Nghĩa | Code phải chịu được bằng cách |
-| --- | --- | --- |
-| Delay | Message đến trễ | Timeout + round mới |
-| Drop | Message mất hẳn | Gửi lại / chờ round sau |
-| Duplicate | Một message đến 2 lần | Dedup ở cả 2 lớp (bảng trên) |
-| Reorder | Đến sai thứ tự | Message của height/round mà node chưa tới thì giữ lại (buffer), tới lượt mới xử lý |
+| Lỗi       | Nghĩa                 | Code phải chịu được bằng cách                                                      |
+| --------- | --------------------- | ---------------------------------------------------------------------------------- |
+| Delay     | Message đến trễ       | Timeout + round mới                                                                |
+| Drop      | Message mất hẳn       | Gửi lại / chờ round sau                                                            |
+| Duplicate | Một message đến 2 lần | Dedup ở cả 2 lớp (bảng trên)                                                       |
+| Reorder   | Đến sai thứ tự        | Message của height/round mà node chưa tới thì giữ lại (buffer), tới lượt mới xử lý |
 
-*Reorder không cần tạo riêng: delay ngẫu nhiên cho từng message đã tự làm thứ tự bị đảo.*
+_Reorder không cần tạo riêng: delay ngẫu nhiên cho từng message đã tự làm thứ tự bị đảo._
 
 ```mermaid
 sequenceDiagram
@@ -537,11 +541,11 @@ Consensus trả lời một câu: **ở height h, block nào được finalize?*
 - **n = 3f + 1:** n validator, tối đa f kẻ xấu. Team chọn n có đúng dạng 3f + 1 để công thức quorum 2f + 1 dùng thẳng được, không phải tính lại. **Team Plan đã chốt n = 10, f = 3, quorum = 7** (đề yêu cầu ≥ 8 node).
 - **Lưu ý:** các ví dụ trong tài liệu này dùng n = 4 hoặc n = 7 cho số nhỏ, dễ theo dõi. Cơ chế giống hệt với n = 10.
 
-| n | f | quorum 2f+1 |
-| --- | --- | --- |
-| 4 | 1 | 3 |
-| 7 | 2 | 5 |
-| 10 | 3 | 7 |
+| n   | f   | quorum 2f+1 |
+| --- | --- | ----------- |
+| 4   | 1   | 3           |
+| 7   | 2   | 5           |
+| 10  | 3   | 7           |
 
 ### Quorum = 2f + 1
 
@@ -572,7 +576,7 @@ flowchart LR
     style Both stroke-width:3px
 ```
 
-*V1 và V2 phải vote cả A lẫn B. Chỉ có 1 Byzantine, nên ít nhất một trong hai là honest, mà honest không bao giờ vote 2 block cùng round. Vì vậy A và B không thể cùng đạt quorum.*
+_V1 và V2 phải vote cả A lẫn B. Chỉ có 1 Byzantine, nên ít nhất một trong hai là honest, mà honest không bao giờ vote 2 block cùng round. Vì vậy A và B không thể cùng đạt quorum._
 
 ### Safety vs Liveness
 
@@ -603,18 +607,18 @@ flowchart LR
     R1 --> R40
 ```
 
-*(Ví dụ n = 7: proposer = validators[(height + round) % 7].)*
+_(Ví dụ n = 7: proposer = validators[(height + round) % 7].)_
 
 ### Một round gồm 3 bước
 
 1. **Propose:** proposer tạo block, ký header, broadcast.
 2. **Prevote:** mỗi validator kiểm tra block (rule 3: parent đúng, tx hợp lệ, state_hash đúng, đúng proposer, chữ ký đúng).
-    - Hợp lệ → ký `PREVOTE(h, r, block_hash)`.
-    - Không hợp lệ hoặc hết giờ chờ → ký `PREVOTE(h, r, NIL)`.
+   - Hợp lệ → ký `PREVOTE(h, r, block_hash)`.
+   - Không hợp lệ hoặc hết giờ chờ → ký `PREVOTE(h, r, NIL)`.
 3. **Precommit:** khi thấy **≥ 2f+1 PREVOTE cho cùng block B** (gọi là **polka**):
-    - **Lock** B (ghi nhớ `locked_block = B`, `locked_round = r`).
-    - Ký `PRECOMMIT(h, r, B)`.
-    - Nếu hết giờ mà không có polka → `PRECOMMIT(h, r, NIL)`.
+   - **Lock** B (ghi nhớ `locked_block = B`, `locked_round = r`).
+   - Ký `PRECOMMIT(h, r, B)`.
+   - Nếu hết giờ mà không có polka → `PRECOMMIT(h, r, NIL)`.
 4. **Commit:** khi thấy **≥ 2f+1 PRECOMMIT cho cùng B** → B **finalized**. Apply vào ledger, sang height h+1, round 0.
 5. Nếu round kết thúc mà không commit → **timeout** → round r+1, proposer mới.
 
@@ -635,7 +639,7 @@ flowchart TD
     style FIN stroke-width:3px
 ```
 
-*Mọi nhánh "không" đều dẫn tới timeout và round mới, không bao giờ tới Finalize.*
+_Mọi nhánh "không" đều dẫn tới timeout và round mới, không bao giờ tới Finalize._
 
 Cùng một round nhìn theo thời gian, từ góc của V0 (n = 4, quorum = 3). Mọi node đều broadcast vote cho tất cả; diagram chỉ vẽ các vote đi tới V0 cho gọn:
 
@@ -699,14 +703,14 @@ stateDiagram-v2
 
 ### Vote rules cần code (section 6.1)
 
-| Rule | Nội dung | Cách code |
-| --- | --- | --- |
-| 1–2 | Tối đa 1 PREVOTE và 1 PRECOMMIT mỗi (height, round) | Lưu `signed_votes[(h, r, phase)]`, đã ký thì không ký nữa |
-| 3 | Chỉ prevote block hợp lệ | Hàm `validate_block()` |
-| 4 | Thấy polka → lock | `locked_block`, `locked_round` |
-| 5 | Đã lock chỉ đổi khi có polka mới hơn | Kiểm tra trước khi prevote |
-| 6 | Không ký vote sai chain/height/round/phase/domain | Kiểm tra trong hàm `sign_vote()` |
-| 7 | Bỏ duplicate, mỗi validator chỉ đếm 1 vote | `votes[(h, r, phase)][validator_id] = vote` |
+| Rule | Nội dung                                            | Cách code                                                 |
+| ---- | --------------------------------------------------- | --------------------------------------------------------- |
+| 1–2  | Tối đa 1 PREVOTE và 1 PRECOMMIT mỗi (height, round) | Lưu `signed_votes[(h, r, phase)]`, đã ký thì không ký nữa |
+| 3    | Chỉ prevote block hợp lệ                            | Hàm `validate_block()`                                    |
+| 4    | Thấy polka → lock                                   | `locked_block`, `locked_round`                            |
+| 5    | Đã lock chỉ đổi khi có polka mới hơn                | Kiểm tra trước khi prevote                                |
+| 6    | Không ký vote sai chain/height/round/phase/domain   | Kiểm tra trong hàm `sign_vote()`                          |
+| 7    | Bỏ duplicate, mỗi validator chỉ đếm 1 vote          | `votes[(h, r, phase)][validator_id] = vote`               |
 
 Một vote đến sẽ đi qua các bước sau trước khi được đếm:
 
@@ -749,14 +753,14 @@ Yêu cầu T8: chạy cùng config + cùng seed 2 lần → **log giống nhau t
 
 **Giải pháp: cùng một code node, hai chế độ chạy.** Phần logic của node (consensus, execution, crypto, gossip) **viết một lần**, không biết mình đang chạy ở chế độ nào. Chỉ có 2 thứ được thay: **cách gửi message (transport)** và **cách lấy thời gian (clock)**.
 
-| | Real mode (P2P thật) | Sim mode (mô phỏng) |
-| --- | --- | --- |
-| Mỗi node là | Một process riêng, có thể trên VM khác | Một object Python, tất cả trong 1 process |
-| Gửi message bằng | TCP thật (`asyncio`) | Đẩy vào event queue trong RAM |
-| Thời gian | Đồng hồ thật | Thời gian giả `sim.now` |
-| Delay/drop/dup | Fault injection + mạng thật | Fault injection |
-| Log chạy lại có giống từng byte? | **Không** (mạng thật không lặp lại được) | **Có** |
-| Dùng để | Demo P2P nhiều VM, chứng minh chạy được thật | T1–T8 tự động, đặc biệt **T8** |
+|                                  | Real mode (P2P thật)                         | Sim mode (mô phỏng)                       |
+| -------------------------------- | -------------------------------------------- | ----------------------------------------- |
+| Mỗi node là                      | Một process riêng, có thể trên VM khác       | Một object Python, tất cả trong 1 process |
+| Gửi message bằng                 | TCP thật (`asyncio`)                         | Đẩy vào event queue trong RAM             |
+| Thời gian                        | Đồng hồ thật                                 | Thời gian giả `sim.now`                   |
+| Delay/drop/dup                   | Fault injection + mạng thật                  | Fault injection                           |
+| Log chạy lại có giống từng byte? | **Không** (mạng thật không lặp lại được)     | **Có**                                    |
+| Dùng để                          | Demo P2P nhiều VM, chứng minh chạy được thật | T1–T8 tự động, đặc biệt **T8**            |
 
 ```mermaid
 flowchart TD
@@ -780,7 +784,7 @@ flowchart TD
     end
 ```
 
-*Vì cả hai chế độ dùng chung node logic, khi sim mode chạy đúng thì logic cũng đúng ở real mode. Khác biệt chỉ còn ở phần chuyển message.*
+_Vì cả hai chế độ dùng chung node logic, khi sim mode chạy đúng thì logic cũng đúng ở real mode. Khác biệt chỉ còn ở phần chuyển message._
 
 **Cần xác nhận với giảng viên:** cách giải thích "T8 chạy ở sim mode, còn real mode dùng để demo P2P" có được chấp nhận không.
 
@@ -803,12 +807,12 @@ flowchart TD
 
 Ví dụ nội dung queue tại một thời điểm:
 
-| time | seq | event |
-| --- | --- | --- |
-| 17 | 42 | DELIVER vote V0 → V3 |
-| 17 | 43 | DELIVER vote V0 → V5 |
-| 25 | 44 | DELIVER proposal V3 → V1 |
-| 110 | 45 | TIMEOUT V2 (h=3, r=0, propose) |
+| time | seq | event                          |
+| ---- | --- | ------------------------------ |
+| 17   | 42  | DELIVER vote V0 → V3           |
+| 17   | 43  | DELIVER vote V0 → V5           |
+| 25   | 44  | DELIVER proposal V3 → V1       |
+| 110  | 45  | TIMEOUT V2 (h=3, r=0, propose) |
 
 ### Real mode: mỗi node một process
 
@@ -837,15 +841,15 @@ flowchart LR
 
 Luật này áp dụng cho **node logic**. Riêng `TcpTransport` và `RealClock` (chỉ dùng ở real mode) được phép dùng `asyncio` và đồng hồ thật.
 
-| Kẻ phá | Thay bằng |
-| --- | --- |
-| `time.time()`, `datetime.now()` trong node logic | `clock.now()` (sim mode trả về `sim.now`) |
-| `random.random()` toàn cục | `self.rng` có seed |
-| Duyệt `set` / dict khi thứ tự quan trọng | `sorted(...)` trước khi duyệt |
-| Gọi `asyncio`, `threading`, socket trực tiếp trong node logic | Chỉ gọi qua interface `transport` / `clock` |
-| `id(obj)`, `hash(str)` (bị random hóa mỗi lần chạy) | Hash SHA-256 của nội dung |
-| Sinh key ngẫu nhiên mỗi lần chạy | Sinh key từ seed cố định (`sha256(seed + node_id)` làm secret key) |
-| `json.dumps` thiếu `sort_keys` | Hàm `encode()` chung |
+| Kẻ phá                                                        | Thay bằng                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `time.time()`, `datetime.now()` trong node logic              | `clock.now()` (sim mode trả về `sim.now`)                          |
+| `random.random()` toàn cục                                    | `self.rng` có seed                                                 |
+| Duyệt `set` / dict khi thứ tự quan trọng                      | `sorted(...)` trước khi duyệt                                      |
+| Gọi `asyncio`, `threading`, socket trực tiếp trong node logic | Chỉ gọi qua interface `transport` / `clock`                        |
+| `id(obj)`, `hash(str)` (bị random hóa mỗi lần chạy)           | Hash SHA-256 của nội dung                                          |
+| Sinh key ngẫu nhiên mỗi lần chạy                              | Sinh key từ seed cố định (`sha256(seed + node_id)` làm secret key) |
+| `json.dumps` thiếu `sort_keys`                                | Hàm `encode()` chung                                               |
 
 ### Log
 
@@ -896,20 +900,20 @@ flowchart LR
     style S5 stroke-dasharray: 5 5
 ```
 
-| Khái niệm trong slides | Ý chính | Trong lab |
-| --- | --- | --- |
-| Full / Archival / Pruned node | Khác nhau ở lượng history giữ lại | Validator của mình = full node. Chỉ nhắc trong report |
-| Light / Stateless client | Chỉ giữ header, verify bằng Merkle proof / witness | Không làm |
-| 5 layer: P2P → Consensus → Execution → State DB → RPC | Mỗi layer một trách nhiệm | **Làm 4 layer đầu**, chính là cách chia module |
-| Processing pipeline (receive → validate → execute → commit → serve) | Thứ tự xử lý block | **Làm bước 1–4**, dedup ở bước 1 |
-| Merkle Patricia Trie, Merkle proof | Cây hash cho state, chứng minh từng key | Tùy chọn; hash cả state đã sorted là đủ |
-| Block header / body / receipts | Header nhỏ, body chứa tx | Header + body, **không cần receipts/gas** |
-| Full / Snap / Checkpoint sync | Đổi tốc độ khởi động lấy mức độ tin tưởng | Không làm |
-| Reorganization (reorg) | Chain kiểu Bitcoin có thể đổi nhánh | **Không có reorg sau finality**. Nên viết rõ điểm khác biệt này trong report |
-| Crash recovery, WAL | Ghi ý định trước khi commit | Không bắt buộc; liên hệ: validator phải nhớ đã ký vote gì để không ký 2 lần |
-| RPC, rate limit, API security | Chống spam ở cổng public | Ý tưởng rate limit xuất hiện ở network layer (block overactive peers) |
-| P2P network | Node nói chuyện trực tiếp với peer, không có server trung tâm | **Làm thật**: TCP giữa các process/VM, gossip qua neighbor |
-| Geth / Erigon / Nethermind | Mỗi client tối ưu một bottleneck | Chỉ tham khảo |
+| Khái niệm trong slides                                              | Ý chính                                                       | Trong lab                                                                    |
+| ------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Full / Archival / Pruned node                                       | Khác nhau ở lượng history giữ lại                             | Validator của mình = full node. Chỉ nhắc trong report                        |
+| Light / Stateless client                                            | Chỉ giữ header, verify bằng Merkle proof / witness            | Không làm                                                                    |
+| 5 layer: P2P → Consensus → Execution → State DB → RPC               | Mỗi layer một trách nhiệm                                     | **Làm 4 layer đầu**, chính là cách chia module                               |
+| Processing pipeline (receive → validate → execute → commit → serve) | Thứ tự xử lý block                                            | **Làm bước 1–4**, dedup ở bước 1                                             |
+| Merkle Patricia Trie, Merkle proof                                  | Cây hash cho state, chứng minh từng key                       | Tùy chọn; hash cả state đã sorted là đủ                                      |
+| Block header / body / receipts                                      | Header nhỏ, body chứa tx                                      | Header + body, **không cần receipts/gas**                                    |
+| Full / Snap / Checkpoint sync                                       | Đổi tốc độ khởi động lấy mức độ tin tưởng                     | Không làm                                                                    |
+| Reorganization (reorg)                                              | Chain kiểu Bitcoin có thể đổi nhánh                           | **Không có reorg sau finality**. Nên viết rõ điểm khác biệt này trong report |
+| Crash recovery, WAL                                                 | Ghi ý định trước khi commit                                   | Không bắt buộc; liên hệ: validator phải nhớ đã ký vote gì để không ký 2 lần  |
+| RPC, rate limit, API security                                       | Chống spam ở cổng public                                      | Ý tưởng rate limit xuất hiện ở network layer (block overactive peers)        |
+| P2P network                                                         | Node nói chuyện trực tiếp với peer, không có server trung tâm | **Làm thật**: TCP giữa các process/VM, gossip qua neighbor                   |
+| Geth / Erigon / Nethermind                                          | Mỗi client tối ưu một bottleneck                              | Chỉ tham khảo                                                                |
 
 Node roles theo slides (lab chỉ có full node):
 
@@ -949,9 +953,9 @@ flowchart LR
     FS["Full sync<br/>replay mọi block<br/>tin: chính mình<br/>chậm"] --> SN["Snap sync<br/>headers + snapshot<br/>tin: snapshot<br/>vừa"] --> CP["Checkpoint sync<br/>từ một hash tin cậy<br/>tin: anchor<br/>nhanh"]
 ```
 
-*Càng sang phải càng khởi động nhanh, nhưng càng phải tin vào thứ người khác đưa.*
+_Càng sang phải càng khởi động nhanh, nhưng càng phải tin vào thứ người khác đưa._
 
-**Điểm cần nhớ nhất:** slides dạy về chain có *probabilistic finality* (có thể reorg), còn lab làm chain có *deterministic finality* (BFT, finalized là xong).
+**Điểm cần nhớ nhất:** slides dạy về chain có _probabilistic finality_ (có thể reorg), còn lab làm chain có _deterministic finality_ (BFT, finalized là xong).
 
 ---
 
@@ -1028,41 +1032,41 @@ flowchart LR
 
 ## Glossary & checklist tự kiểm tra
 
-| Thuật ngữ | Nghĩa ngắn |
-| --- | --- |
-| Bytes | Dạng dữ liệu thô máy tính xử lý; hash và chữ ký chỉ nhận bytes |
-| Encode | Biến object (tx, vote, ...) thành bytes |
-| Secret key / Public key | Key chỉ chủ nhân giữ / key ai cũng có |
-| Signature (chữ ký) | Chuỗi tạo từ message + secret key; chứng minh ai gửi và không bị sửa |
-| Honest node | Node chạy đúng code, làm đúng mọi luật |
-| Validator | Node có quyền vote |
-| Proposer | Validator được đề xuất block ở (height, round) này |
-| Byzantine | Node có thể làm bất cứ điều gì xấu |
-| f | Số Byzantine tối đa; n = 3f + 1 |
-| Quorum | ≥ 2f + 1 vote cùng giá trị |
-| Polka | Quorum PREVOTE cho cùng block |
-| NIL vote | Vote "không ủng hộ block nào" |
-| Lock | Cam kết chỉ prevote block này cho tới khi thấy polka mới hơn |
-| Finalized | Đã có quorum PRECOMMIT, vĩnh viễn |
-| Equivocation | Ký 2 vote khác nhau cho cùng (h, r, phase) |
-| Replay | Gửi lại message cũ |
-| Domain separation | Ghi nhãn loại message (`TX:lab01`, `VOTE:lab01`, ...) vào đầu phần được ký, để chữ ký loại này không dùng được cho loại khác |
-| Canonical encoding | Một cách duy nhất biến object thành bytes |
-| State hash / commitment | Một hash đại diện cho toàn bộ state |
-| GST / ∆ | Thời điểm mạng ổn định / delay tối đa sau đó |
-| Safety / Liveness | Không sai bao giờ / cuối cùng sẽ tiến |
-| Mempool | Hàng chờ tx chưa vào block |
-| Nonce | Số đếm tx của mỗi sender, chống replay tx |
-| DES | Discrete-event simulation, chạy theo thời gian giả |
-| Peer / Neighbor | Node mà một node nối TCP trực tiếp tới |
-| Topology | Bản đồ "ai nối với ai", đọc từ file hoặc sinh từ seed |
-| TCP connection | "Đường ống" chuyển bytes giữa 2 chương trình qua mạng |
-| Framing | Ghi độ dài trước mỗi message để bên nhận biết ranh giới |
-| Gossip (flooding) | Nhận message mới thì chuyển tiếp cho mọi neighbor; message đã thấy thì bỏ qua |
-| Broadcast | Gửi tới mọi node trong mạng (thực hiện bằng gossip) |
-| Fault injection | Lớp chủ động delay/drop/duplicate message theo config + seed |
-| Real mode / Sim mode | Chạy P2P thật trên nhiều process/VM / chạy mô phỏng 1 process, deterministic |
-| Transport / Clock | 2 interface node logic dùng để gửi message và lấy thời gian; mỗi chế độ có bản riêng |
+| Thuật ngữ               | Nghĩa ngắn                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Bytes                   | Dạng dữ liệu thô máy tính xử lý; hash và chữ ký chỉ nhận bytes                                                               |
+| Encode                  | Biến object (tx, vote, ...) thành bytes                                                                                      |
+| Secret key / Public key | Key chỉ chủ nhân giữ / key ai cũng có                                                                                        |
+| Signature (chữ ký)      | Chuỗi tạo từ message + secret key; chứng minh ai gửi và không bị sửa                                                         |
+| Honest node             | Node chạy đúng code, làm đúng mọi luật                                                                                       |
+| Validator               | Node có quyền vote                                                                                                           |
+| Proposer                | Validator được đề xuất block ở (height, round) này                                                                           |
+| Byzantine               | Node có thể làm bất cứ điều gì xấu                                                                                           |
+| f                       | Số Byzantine tối đa; n = 3f + 1                                                                                              |
+| Quorum                  | ≥ 2f + 1 vote cùng giá trị                                                                                                   |
+| Polka                   | Quorum PREVOTE cho cùng block                                                                                                |
+| NIL vote                | Vote "không ủng hộ block nào"                                                                                                |
+| Lock                    | Cam kết chỉ prevote block này cho tới khi thấy polka mới hơn                                                                 |
+| Finalized               | Đã có quorum PRECOMMIT, vĩnh viễn                                                                                            |
+| Equivocation            | Ký 2 vote khác nhau cho cùng (h, r, phase)                                                                                   |
+| Replay                  | Gửi lại message cũ                                                                                                           |
+| Domain separation       | Ghi nhãn loại message (`TX:lab01`, `VOTE:lab01`, ...) vào đầu phần được ký, để chữ ký loại này không dùng được cho loại khác |
+| Canonical encoding      | Một cách duy nhất biến object thành bytes                                                                                    |
+| State hash / commitment | Một hash đại diện cho toàn bộ state                                                                                          |
+| GST / ∆                 | Thời điểm mạng ổn định / delay tối đa sau đó                                                                                 |
+| Safety / Liveness       | Không sai bao giờ / cuối cùng sẽ tiến                                                                                        |
+| Mempool                 | Hàng chờ tx chưa vào block                                                                                                   |
+| Nonce                   | Số đếm tx của mỗi sender, chống replay tx                                                                                    |
+| DES                     | Discrete-event simulation, chạy theo thời gian giả                                                                           |
+| Peer / Neighbor         | Node mà một node nối TCP trực tiếp tới                                                                                       |
+| Topology                | Bản đồ "ai nối với ai", đọc từ file hoặc sinh từ seed                                                                        |
+| TCP connection          | "Đường ống" chuyển bytes giữa 2 chương trình qua mạng                                                                        |
+| Framing                 | Ghi độ dài trước mỗi message để bên nhận biết ranh giới                                                                      |
+| Gossip (flooding)       | Nhận message mới thì chuyển tiếp cho mọi neighbor; message đã thấy thì bỏ qua                                                |
+| Broadcast               | Gửi tới mọi node trong mạng (thực hiện bằng gossip)                                                                          |
+| Fault injection         | Lớp chủ động delay/drop/duplicate message theo config + seed                                                                 |
+| Real mode / Sim mode    | Chạy P2P thật trên nhiều process/VM / chạy mô phỏng 1 process, deterministic                                                 |
+| Transport / Clock       | 2 interface node logic dùng để gửi message và lấy thời gian; mỗi chế độ có bản riêng                                         |
 
 Bản đồ khái niệm (mỗi mũi tên = "cần hiểu cái này trước"):
 
@@ -1103,3 +1107,4 @@ flowchart LR
 - [ ] V0 không nối trực tiếp tới V5, vậy vote của V0 tới V5 bằng cách nào? Vì sao message không bị chuyển tiếp vô hạn?
 - [ ] Vì sao cần cả real mode lẫn sim mode? Test T8 chạy ở chế độ nào?
 - [ ] Vì sao lab không có reorg, trong khi slides có nói về reorg?
+
